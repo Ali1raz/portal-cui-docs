@@ -1,9 +1,9 @@
 {
   "pages": [
+    "index",
     "leave-requests",
     "complaints",
     "fee-installments",
-    "announcements",
-    "..."
+    "announcements"
   ]
 }

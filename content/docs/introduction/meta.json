@@ -1,9 +1,3 @@
 {
-  "pages": [
-    "index",
-    "about",
-    "tech-stack",
-    "modules",
-    "abbreviations"
-  ]
+  "pages": ["index", "abbreviations", "about", "tech-stack", "modules"]
 }
