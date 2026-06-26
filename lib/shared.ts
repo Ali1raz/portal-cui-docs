@@ -9,4 +9,5 @@ export const gitConfig = {
   repo: "portal-cui-docs",
   branch: "main",
   userWebsite: "https://ali1raz.vercel.app",
+  appUrl: "https://portal-cui.vercel.app",
 };

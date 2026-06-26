@@ -43,6 +43,11 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           markdownUrl={markdownUrl}
           githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${page.path}`}
         />
+        {page.data.lastModified && (
+          <span className="ml-auto text-sm text-muted-foreground">
+            Last modified: {page.data.lastModified.toLocaleDateString()}
+          </span>
+        )}
       </div>
       <DocsBody>
         <MDX
