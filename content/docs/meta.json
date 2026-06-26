@@ -1,3 +1,9 @@
 {
-  "pages": ["getting-started", "---Label---", "..."]
+  "pages": [
+    "---Introduction---",
+    "introduction",
+    "getting-started",
+    "---Label---",
+    "..."
+  ]
 }

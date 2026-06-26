@@ -1,0 +1,122 @@
+---
+title: Tech Stack
+description: Overview used for this project
+---
+
+We used cutting-edge, full-stack TypeScript tools. Because of its superior
+performance, integrated API routes, server-side rendering, and simple deployment, Next.js was
+chosen as the main framework. 
+
+# Tools and Technologies
+
+## Tailwind CSS
+Tailwind handles all styling. Utility classes keep styles colocated with markup and
+eliminate the need for a separate stylesheet layer. The design stays consistent because
+spacing, color, and typography all pull from a shared config.
+
+## Shadcn/ui
+UI components come from shadcn/ui, which provides unstyled, accessible primitives
+built on Radix UI. Components are copied into the codebase rather than installed as
+a black-box dependency, so they can be modified freely. The sidebar uses cookie-based
+state persistence for SSR compatibility, avoiding layout flash on first load.
+
+## TypeScript
+The entire codebase is TypeScript. Combined with Prisma's generated client, type safety
+runs from the database schema all the way to the component layer. A wrong field name,
+a missing relation, a status enum value that does not exist, all of these fail at compile
+time. This matters more than it might seem on a project with this many roles and status
+transitions, where a runtime bug in an approval chain is genuinely hard to reproduce and
+debug.
+
+## Zod
+Every server action validates incoming data with Zod before touching the database.
+Schema validation is server-side only. Client-side validation exists purely as a UX
+convenience and is never trusted on its own.
+
+## React Hook Form
+Forms use React Hook Form. Validation integrates with Zod via the `zodResolver`,
+so the same schema that validates on the server also drives client-side field errors.
+Form state stays uncontrolled by default, which keeps re-renders minimal on large forms
+like the student application or complaint submission.
+
+## Next.js 16 (App Router)
+
+The entire portal is built on Next.js 16 using the App Router. Pages are React Server
+Components by default, which means data fetching happens on the server and only the
+minimum JavaScript ships to the client. Mutations run through server actions rather
+than a separate API layer. Client components are used only where interactivity is
+genuinely needed, kept as narrow islands rather than full page conversions.
+
+## React 19
+React 19 ships with improved support for server components and concurrent features
+that the App Router depends on. Form state and transitions use the new `useActionState`
+and `useTransition` hooks, which integrate cleanly with server actions and give
+optimistic UI without extra libraries.
+
+
+## PostgreSQL
+The database is PostgreSQL. The choice is deliberate: every module in this portal
+involves multi-step approval workflows with strict status ordering. Relational integrity,
+foreign keys, unique constraints, and enum types enforced at the DB level, means invalid
+states get rejected before they reach application logic. PostgreSQL handles this better
+than any document store would.
+
+## Prisma ORM
+Prisma sits in front of PostgreSQL and handles query building, migrations, and end-to-end
+type safety. Schema changes are tracked as versioned migration files. The generated
+client gives fully typed queries throughout the codebase, so a mismatched field name
+fails at compile time rather than at runtime.
+
+## Better-auth
+Authentication is handled entirely by better-auth. The portal never stores or compares
+raw passwords. better-auth manages credential validation, session creation, and the
+admin plugin used for banning users. Sessions are set as HTTP-only cookies. The
+application code reads the session object, never the raw token.
+
+## Inngest
+Background jobs run through Inngest. Scheduled announcements and any time-sensitive
+operations use Inngest rather than cron jobs or inline timeouts. Inngest persists job
+state externally, so a server restart or cold start does not lose scheduled work. The
+main request path returns immediately and the job runs asynchronously.
+
+## Arcjet
+Arcjet handles rate limiting on mutation endpoints. Leave request actions are protected
+with fingerprint-based fixed-window limiting, five requests per ten minutes. The gate
+runs before any business logic or database write, so burst traffic is denied early.
+
+
+## Vercel
+The portal is deployed on Vercel. Next.js was built by Vercel and the two integrate
+without configuration. Deployments happen automatically on push. Each pull request gets
+a preview URL, which makes reviewing UI changes straightforward without running anything
+locally. Vercel's edge network handles static assets and Inngest handles the background
+jobs, so the serverless function layer stays focused on request handling.
+
+## TanStack Table
+Data-heavy views, complaint queues, leave request lists, fee installment tables, use
+TanStack Table for rendering. It handles sorting, filtering, and pagination in a
+headless way, meaning it owns the logic but not the markup. The table renders with
+shadcn/ui components on top, so the visual output stays consistent with the rest of
+the portal while the table behavior stays fully controllable.
+
+
+## AI Agents for Repetitive Tasks
+Several development tasks in this project are repetitive enough to delegate to an AI
+agent entirely. Schema changes that require updating a server action, a Zod schema,
+and a form in lockstep are handled by writing a detailed agent prompt that describes
+the existing structure and the required change. The agent reads the relevant files,
+makes the changes, and the output is reviewed before being run. This applies to
+generating new CRUD modules, writing audit log inserts alongside status updates, and
+scaffolding new role-scoped pages that follow an established pattern. The agent does
+not replace design decisions, but it removes the cost of mechanical implementation
+work that would otherwise slow down iteration.
+
+## Agent Skills
+Reusable agent skills are maintained as SKILL.md files that encode hard-won context
+about the project, available libraries, constraints, naming conventions, and patterns
+that are not obvious from the codebase alone. Before an agent writes any file, it reads
+the relevant skill. This means a new agent session does not start from zero. It starts
+with the same working knowledge that any developer who has spent time in the codebase
+would have. Skills cover document generation, frontend design constraints, file reading
+strategies, and product-specific knowledge that would otherwise have to be re-explained
+in every prompt.

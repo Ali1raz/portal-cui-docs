@@ -1,4 +1,4 @@
-export const appName = "My App";
+export const appName = "CUI portal";
 export const docsRoute = "/docs";
 export const docsImageRoute = "/og/docs";
 export const docsContentRoute = "/llms.mdx/docs";
@@ -7,6 +7,6 @@ export const docsContentRoute = "/llms.mdx/docs";
 export const gitConfig = {
   user: "ali1raz",
   repo: "portal-cui-docs",
-  branch: "master",
-  userWebsite: "",
+  branch: "main",
+  userWebsite: "https://ali1raz.vercel.app",
 };
