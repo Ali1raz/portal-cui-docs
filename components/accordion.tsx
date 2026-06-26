@@ -1,22 +1,29 @@
-'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";
 
-import { Check, LinkIcon } from 'lucide-react';
-import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
-import { cn } from '../lib/cn';
-import { useCopyButton } from 'fumadocs-ui/utils/use-copy-button';
-import { buttonVariants } from './ui/button';
-import { mergeRefs } from '../lib/merge-refs';
-import { useTranslations } from '@fuma-translate/react';
+import { Check, LinkIcon } from "lucide-react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { cn } from "../lib/cn";
+import { useCopyButton } from "fumadocs-ui/utils/use-copy-button";
+import { buttonVariants } from "./ui/button";
+import { mergeRefs } from "../lib/merge-refs";
+import { useTranslations } from "@fuma-translate/react";
 import {
   Accordion as Root,
   AccordionContent,
   AccordionHeader,
   AccordionItem,
   AccordionTrigger,
-} from './ui/accordion';
+} from "./ui/accordion";
 
 export function Accordions({
-  type = 'single',
+  type = "single",
   ref,
   className,
   defaultValue,
@@ -25,7 +32,7 @@ export function Accordions({
   const rootRef = useRef<HTMLDivElement>(null);
   const composedRef = mergeRefs(ref, rootRef);
   const [value, setValue] = useState<string | string[]>(() =>
-    type === 'single' ? (defaultValue ?? '') : (defaultValue ?? []),
+    type === "single" ? (defaultValue ?? "") : (defaultValue ?? []),
   );
 
   useEffect(() => {
@@ -35,9 +42,10 @@ export function Accordions({
 
     const selected = document.getElementById(id);
     if (!selected || !element.contains(selected)) return;
-    const value = selected.getAttribute('data-accordion-value');
+    const value = selected.getAttribute("data-accordion-value");
 
-    if (value) setValue((prev) => (typeof prev === 'string' ? value : [value, ...prev]));
+    if (value)
+      setValue((prev) => (typeof prev === "string" ? value : [value, ...prev]));
   }, []);
 
   return (
@@ -47,9 +55,9 @@ export function Accordions({
       ref={composedRef}
       value={value}
       onValueChange={setValue}
-      collapsible={type === 'single' ? true : undefined}
+      collapsible={type === "single" ? true : undefined}
       className={cn(
-        'divide-y divide-fd-border overflow-hidden rounded-lg border bg-fd-card',
+        "divide-y divide-fd-border overflow-hidden rounded-lg border bg-fd-card",
         className,
       )}
       {...props}
@@ -63,7 +71,7 @@ export function Accordion({
   value = String(title),
   children,
   ...props
-}: Omit<ComponentProps<typeof AccordionItem>, 'value' | 'title'> & {
+}: Omit<ComponentProps<typeof AccordionItem>, "value" | "title"> & {
   title: string | ReactNode;
   value?: string;
 }) {
@@ -74,14 +82,16 @@ export function Accordion({
         {id ? <CopyButton id={id} /> : null}
       </AccordionHeader>
       <AccordionContent>
-        <div className="px-4 pb-2 text-[0.9375rem] prose-no-margin">{children}</div>
+        <div className="px-4 pb-2 text-[0.9375rem] prose-no-margin">
+          {children}
+        </div>
       </AccordionContent>
     </AccordionItem>
   );
 }
 
 function CopyButton({ id }: { id: string }) {
-  const t = useTranslations({ note: 'accordion' });
+  const t = useTranslations({ note: "accordion" });
   const [checked, onClick] = useCopyButton(() => {
     const url = new URL(window.location.href);
     url.hash = id;
@@ -92,16 +102,20 @@ function CopyButton({ id }: { id: string }) {
   return (
     <button
       type="button"
-      aria-label={t('Copy Link', { note: 'aria-label' })}
+      aria-label={t("Copy Link", { note: "aria-label" })}
       className={cn(
         buttonVariants({
-          color: 'ghost',
-          className: 'text-fd-muted-foreground me-2',
+          variant: "ghost",
+          className: "text-fd-muted-foreground me-2",
         }),
       )}
       onClick={onClick}
     >
-      {checked ? <Check className="size-3.5" /> : <LinkIcon className="size-3.5" />}
+      {checked ? (
+        <Check className="size-3.5" />
+      ) : (
+        <LinkIcon className="size-3.5" />
+      )}
     </button>
   );
 }
