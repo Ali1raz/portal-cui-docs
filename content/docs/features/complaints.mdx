@@ -1,0 +1,142 @@
+---
+title: Complaints Workflow
+description: Structured complaints submission and review workflow, BA and HOD review stages, departmental transfers, and audit trail.
+---
+
+The complaints workflow gives students a formal channel to raise grievances. Submissions
+move through two sequential review stages, batch advisor first then HOD, with a full
+audit trail written at every transition. Nothing gets quietly dropped. Every actor
+action is on record.
+
+## Lifecycle State Machine
+
+The complaint lifecycle is governed by the `ComplaintStatus` enum. Transitions are
+restricted by both the current state and the actor's role, so a student cannot trigger
+a BA action and a BA cannot trigger an HOD action.
+
+### State Transitions
+
+| From Status            | Action                  | To Status              | Actor         |
+| ---------------------- | ----------------------- | ---------------------- | ------------- |
+| `START`                | Submit complaint        | `BA_PENDING`           | Student       |
+| `BA_PENDING`           | Forward to HOD          | `HOD_PENDING`          | Batch Advisor |
+| `BA_PENDING`           | Reject                  | `BA_REJECTED`          | Batch Advisor |
+| `BA_PENDING`           | Request revision        | `BA_REVIEW_REQUESTED`  | Batch Advisor |
+| `BA_REVIEW_REQUESTED`  | Edit and resubmit       | `BA_PENDING`           | Student       |
+| `BA_REJECTED`          | Edit and resubmit       | `BA_PENDING`           | Student       |
+| `BA_REJECTED`          | Delete                  | `(deleted)`            | Student       |
+| `HOD_PENDING`          | Accept                  | `HOD_ACCEPTED`         | HOD           |
+| `HOD_PENDING`          | Reject                  | `HOD_REJECTED`         | HOD           |
+| `HOD_PENDING`          | Transfer to department  | `ASSIGNED`             | HOD           |
+
+### State Machine
+
+<Mermaid
+  chart="
+stateDiagram-v2
+    direction LR
+
+    [*] --> BA_PENDING : Student submits
+
+    BA_PENDING --> BA_REVIEW_REQUESTED : BA requests revision
+    BA_PENDING --> HOD_PENDING : BA forwards
+    BA_PENDING --> BA_REJECTED : BA rejects
+
+    BA_REVIEW_REQUESTED --> BA_PENDING : Student resubmits
+
+    BA_REJECTED --> BA_PENDING : Student revises and resubmits
+    BA_REJECTED --> [*] : Student deletes
+
+    HOD_PENDING --> HOD_ACCEPTED : HOD resolves
+    HOD_PENDING --> HOD_REJECTED : HOD rejects
+    HOD_PENDING --> ASSIGNED : HOD transfers to department
+
+    HOD_ACCEPTED --> [*]
+    HOD_REJECTED --> [*]
+    ASSIGNED --> [*]
+" />
+
+## Status Visual Reference
+
+The portal uses a centralized `STATUS_CONFIG` object to keep labels, colors, and
+descriptions consistent across every role's view of a complaint.
+
+| Status               | Label          | Visual Indicator                              |
+| -------------------- | -------------- | --------------------------------------------- |
+| `BA_PENDING`         | Under Review   | Amber pulse dot, BA action needed             |
+| `BA_REJECTED`        | Needs Revision | Red, student can still edit and resubmit      |
+| `BA_REVIEW_REQUESTED` | Info Requested | Orange, student must respond                  |
+| `HOD_PENDING`        | HOD Pending    | Blue pulse, forwarded by BA                   |
+| `HOD_ACCEPTED`       | Resolved       | Emerald, terminal state                       |
+| `HOD_REJECTED`       | Dismissed      | Red, terminal state                           |
+| `ASSIGNED`           | Transferred    | Purple, routed to another department          |
+
+## Audit Trail
+
+Every state transition writes one immutable row to `ComplaintReview`. The timeline
+UI reads from this table, not from the complaint record itself, so the full
+back-and-forth history is always reconstructable even after the complaint reaches
+a terminal state.
+
+Each `ComplaintReview` row captures four things: who acted (`actorRole`), what they
+did (`action`), what they wrote (`remarks`), and the state transition (`fromStatus`
+and `toStatus`). The `action` field maps to a `ReviewAction` enum which the
+`ACTION_CONFIG` object then translates into icons and labels for the timeline
+component.
+
+Every action call wraps the complaint status update and the review log insert in a
+single `prisma.$transaction`. The two writes either both succeed or both fail. There
+is no state where the complaint moved but the audit log did not record it.
+
+## Batch Advisor Review
+
+The BA queue shows complaints in `BA_PENDING` and `BA_REVIEW_REQUESTED` status,
+filtered to their own department. That filter runs in the data fetcher, not in
+the UI, so there is no client-side workaround.
+
+When the BA requests a revision, remarks are attached and the student is notified.
+The student edits the complaint and resubmits, which resets status to `BA_PENDING`
+and writes a `RESUBMITTED` review entry. The BA then sees it again as a fresh item
+in their queue.
+
+## HOD Review
+
+The HOD sees only `HOD_PENDING` complaints scoped to their department. Three outcomes
+are available. Accept moves to `HOD_ACCEPTED`, a terminal resolved state. Reject moves
+to `HOD_REJECTED`, also terminal. The third option is a departmental transfer.
+
+## Departmental Transfers
+
+When a complaint does not belong to the HOD's department, the HOD can transfer it.
+The `categoryToDepartment` utility maps the complaint category to the appropriate
+administrative unit automatically. For example, a fee-related complaint routes to
+accounts, a harassment complaint routes to student affairs.
+
+On transfer, three writes happen inside a transaction: the `Complaint` record gets
+its `targetDepartment` updated and status set to `ASSIGNED`, a `ComplaintAssignment`
+row is inserted with `fromDepartment` and `toDepartment`, and a `ComplaintReview`
+entry records the HOD's transfer action. The complaint then appears in the receiving
+department's queue.
+
+## Security
+
+Complaint creation and updates are rate-limited via Arcjet at 5 requests per 24 hours
+per user. That is stricter than the leave request limit, which makes sense since
+complaints are higher-stakes submissions that should not be spammed.
+
+Every action also runs `requirePermission` with a specific scope before touching the
+database. Students are checked for `complaints:create` on submission and
+`complaints:update:own` on edits. Ownership is enforced in the data fetcher by
+matching `studentId` against the session profile, so a student cannot read or
+mutate another student's complaint even with a valid session.
+
+## Rate Limiting
+
+Every mutation endpoint is protected via Arcjet with fingerprint-based fixed-window
+rate limiting. Limits are scoped by the actor's role:
+
+| Role            | Limit                    |
+| --------------- | ------------------------ |
+| Student         | 10 requests per 10 min   |
+| Batch Advisor   | 10 requests per 10 min   |
+| HOD             | 15 requests per 10 min   |

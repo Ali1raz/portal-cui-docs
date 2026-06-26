@@ -1,0 +1,102 @@
+---
+title: Leave Requests
+description: Multi-stage approval workflow for student leave requests, from submission through BA and HOD review to attendance reconciliation.
+---
+
+The leave request workflow is a multi-stage state machine. A student submits, a batch
+advisor filters, an HOD makes the final call, and admin reconciles attendance after
+approval. Every transition is logged to `LeaveRequestReview` so the full audit trail
+is always reconstructable.
+
+## Workflow Lifecycle
+
+The lifecycle is governed by the `LeaveStatus` enum. Each state transition writes one
+immutable row to the `LeaveRequestReview` table.
+
+### State Transitions
+
+| From Status          | Action                  | To Status            | Actor         |
+| -------------------- | ----------------------- | -------------------- | ------------- |
+| `START`              | `sendLeaveRequest`      | `PENDING`            | Student       |
+| `PENDING`            | `BA_APPROVED`           | `HOD_PENDING`        | Batch Advisor |
+| `PENDING`            | `BA_REJECTED`           | `REJECTED`           | Batch Advisor |
+| `PENDING`            | `BA_REVIEW_REQUESTED`   | `REVIEW_REQUESTED`   | Batch Advisor |
+| `REVIEW_REQUESTED`   | `editLeaveRequest`      | `PENDING`            | Student       |
+| `HOD_PENDING`        | `HOD_APPROVED`          | `APPROVED`           | HOD           |
+| `HOD_PENDING`        | `HOD_REJECTED`          | `REJECTED`           | HOD           |
+
+### State Machine
+
+<Mermaid
+chart="
+stateDiagram-v2
+    direction LR
+
+    [*] --> PENDING : Student submits
+
+    PENDING --> REVIEW_REQUESTED : BA requests more info
+    PENDING --> HOD_PENDING : BA accepts
+    PENDING --> REJECTED : BA rejects
+
+    REVIEW_REQUESTED --> PENDING : Student resubmits
+
+    HOD_PENDING --> APPROVED : HOD accepts
+    HOD_PENDING --> REJECTED : HOD rejects
+
+    APPROVED --> [*] : Admin reconciles attendance
+    REJECTED --> [*]
+" />
+
+## Student Submission
+
+Students submit via the leave request form, selecting a subject offering and a date.
+The form enforces a date constraint: no past dates, and no dates more than 4 days in
+the future. Supporting documents like medical certificates can be uploaded and are
+stored in AWS S3, with only the `imageKey` saved in the database.
+
+Rate limiting runs before the submission action via Arcjet, fingerprint-based fixed
+window, 5 requests per 10 minutes. The duplicate check runs at the DB level using
+the unique constraint on `(studentId, offeringId, date)`, so a student cannot submit
+two requests for the same class on the same day.
+
+## Batch Advisor Review
+
+The BA sees only requests from students in their own department. That scoping is
+enforced in the data fetcher, not at the UI layer, so there is no way to read another
+department's queue.
+
+When the BA requests more info, the status moves to `REVIEW_REQUESTED` and the student
+receives an email notification with the BA's remarks. The student edits and resubmits,
+which resets status to `PENDING` and puts it back in the BA queue.
+
+Status changes and review log inserts happen inside a `prisma.$transaction` so the
+state change and the audit entry are always consistent. One cannot succeed without
+the other.
+
+## HOD Final Decision
+
+The HOD sees only requests in `HOD_PENDING` status, filtered to their department.
+Approval moves the request to `APPROVED`. Rejection is terminal. There is no further
+escalation path from the HOD.
+
+## Administrative Attendance Reconciliation
+
+Approved leave requests do not automatically update attendance records. That is a
+deliberate design choice. Admin reviews approved requests in a dedicated view, filters
+by semester, department, or date, and manually triggers the attendance correction via
+a confirmation dialog. This marks the student as `LEAVE` on the specific lecture
+attendance record associated with the request date.
+
+The separation exists because the leave date and the attendance record date need to
+match, and that match is worth a human confirming rather than assuming.
+
+## Rate Limiting
+
+Every mutation endpoint is protected via Arcjet with fingerprint-based fixed-window
+rate limiting. Limits are scoped by the actor's role:
+
+| Role            | Limit                    |
+| --------------- | ------------------------ |
+| Student         | 10 requests per 10 min   |
+| Batch Advisor   | 10 requests per 10 min   |
+| HOD             | 15 requests per 10 min   |

@@ -2,6 +2,7 @@
 title: Tech Stack
 description: Overview used for this project
 ---
+import { Nextjs, TailwindCSS, Shadcnui, TypeScript, PostgreSQL, Prisma, BetterAuth, Inngest, Vercel, TanStack } from '@/components/companies';
 
 We used cutting-edge, full-stack TypeScript tools. Because of its superior
 performance, integrated API routes, server-side rendering, and simple deployment, Next.js was
@@ -14,11 +15,25 @@ Tailwind handles all styling. Utility classes keep styles colocated with markup 
 eliminate the need for a separate stylesheet layer. The design stays consistent because
 spacing, color, and typography all pull from a shared config.
 
+<Cards>
+    <Card icon={<TailwindCSS className="size-8" />} href="https://tailwindcss.com/docs"
+    title="Learn more about Tailwind CSS">
+     Learn more about Tailwind CSS
+  </Card>
+</Cards>
+
 ## Shadcn/ui
 UI components come from shadcn/ui, which provides unstyled, accessible primitives
 built on Radix UI. Components are copied into the codebase rather than installed as
 a black-box dependency, so they can be modified freely. The sidebar uses cookie-based
 state persistence for SSR compatibility, avoiding layout flash on first load.
+
+<Cards>
+    <Card icon={<Shadcnui className="size-8 invert dark:invert-0" />} href="https://ui.shadcn.com"
+    title="Learn more about shadcn/ui">
+     Learn more about shadcn/ui
+  </Card>
+</Cards>
 
 ## TypeScript
 The entire codebase is TypeScript. Combined with Prisma's generated client, type safety
@@ -28,16 +43,37 @@ time. This matters more than it might seem on a project with this many roles and
 transitions, where a runtime bug in an approval chain is genuinely hard to reproduce and
 debug.
 
+<Cards>
+    <Card icon={<TypeScript className="size-8" />} href="https://www.typescriptlang.org/docs/"
+    title="Learn more about TypeScript">
+     Learn more about TypeScript
+  </Card>
+</Cards>
+
 ## Zod
 Every server action validates incoming data with Zod before touching the database.
 Schema validation is server-side only. Client-side validation exists purely as a UX
 convenience and is never trusted on its own.
+
+<Cards>
+    <Card href="https://zod.dev"
+    title="Learn more about Zod">
+     Learn more about Zod
+  </Card>
+</Cards>
 
 ## React Hook Form
 Forms use React Hook Form. Validation integrates with Zod via the `zodResolver`,
 so the same schema that validates on the server also drives client-side field errors.
 Form state stays uncontrolled by default, which keeps re-renders minimal on large forms
 like the student application or complaint submission.
+
+<Cards>
+    <Card href="https://react-hook-form.com"
+    title="Learn more about React Hook Form">
+     Learn more about React Hook Form
+  </Card>
+</Cards>
 
 ## Next.js 16 (App Router)
 
@@ -47,11 +83,26 @@ minimum JavaScript ships to the client. Mutations run through server actions rat
 than a separate API layer. Client components are used only where interactivity is
 genuinely needed, kept as narrow islands rather than full page conversions.
 
+<Cards>
+    <Card icon={<Nextjs className="size-8 invert-0 dark:invert" />} href="https://nextjs.org/docs"
+    title="Learn more about Next.js">
+     Learn more about Next.js
+  </Card>
+</Cards>
+
+
 ## React 19
 React 19 ships with improved support for server components and concurrent features
 that the App Router depends on. Form state and transitions use the new `useActionState`
 and `useTransition` hooks, which integrate cleanly with server actions and give
 optimistic UI without extra libraries.
+
+<Cards>
+    <Card href="https://react.dev"
+    title="Learn more about React">
+     Learn more about React
+  </Card>
+</Cards>
 
 
 ## PostgreSQL
@@ -61,11 +112,25 @@ foreign keys, unique constraints, and enum types enforced at the DB level, means
 states get rejected before they reach application logic. PostgreSQL handles this better
 than any document store would.
 
+<Cards>
+    <Card icon={<PostgreSQL className="size-8" />} href="https://www.postgresql.org/docs/"
+    title="Learn more about PostgreSQL">
+     Learn more about PostgreSQL
+  </Card>
+</Cards>
+
 ## Prisma ORM
 Prisma sits in front of PostgreSQL and handles query building, migrations, and end-to-end
 type safety. Schema changes are tracked as versioned migration files. The generated
 client gives fully typed queries throughout the codebase, so a mismatched field name
 fails at compile time rather than at runtime.
+
+<Cards>
+    <Card icon={<Prisma className="size-8 invert dark:invert-0" />} href="https://www.prisma.io/docs"
+    title="Learn more about Prisma">
+     Learn more about Prisma
+  </Card>
+</Cards>
 
 ## Better-auth
 Authentication is handled entirely by better-auth. The portal never stores or compares
@@ -73,16 +138,37 @@ raw passwords. better-auth manages credential validation, session creation, and 
 admin plugin used for banning users. Sessions are set as HTTP-only cookies. The
 application code reads the session object, never the raw token.
 
+<Cards>
+    <Card icon={<BetterAuth className="size-8" />} href="https://www.better-auth.com"
+    title="Learn more about Better Auth">
+     Learn more about Better Auth
+  </Card>
+</Cards>
+
 ## Inngest
 Background jobs run through Inngest. Scheduled announcements and any time-sensitive
 operations use Inngest rather than cron jobs or inline timeouts. Inngest persists job
 state externally, so a server restart or cold start does not lose scheduled work. The
 main request path returns immediately and the job runs asynchronously.
 
+<Cards>
+    <Card icon={<Inngest className="size-8 invert dark:invert-0" />} href="https://www.inngest.com/docs"
+    title="Learn more about Inngest">
+     Learn more about Inngest
+  </Card>
+</Cards>
+
 ## Arcjet
 Arcjet handles rate limiting on mutation endpoints. Leave request actions are protected
 with fingerprint-based fixed-window limiting, five requests per ten minutes. The gate
 runs before any business logic or database write, so burst traffic is denied early.
+
+<Cards>
+    <Card href="https://docs.arcjet.com"
+    title="Learn more about Arcjet">
+     Learn more about Arcjet
+  </Card>
+</Cards>
 
 
 ## Vercel
@@ -92,12 +178,26 @@ a preview URL, which makes reviewing UI changes straightforward without running 
 locally. Vercel's edge network handles static assets and Inngest handles the background
 jobs, so the serverless function layer stays focused on request handling.
 
+<Cards>
+    <Card icon={<Vercel className="size-8 invert dark:invert-0" />} href="https://vercel.com/docs"
+    title="Learn more about Vercel">
+     Learn more about Vercel
+  </Card>
+</Cards>
+
 ## TanStack Table
 Data-heavy views, complaint queues, leave request lists, fee installment tables, use
 TanStack Table for rendering. It handles sorting, filtering, and pagination in a
 headless way, meaning it owns the logic but not the markup. The table renders with
 shadcn/ui components on top, so the visual output stays consistent with the rest of
 the portal while the table behavior stays fully controllable.
+
+<Cards>
+    <Card href="https://tanstack.com/table/latest"
+    title="Learn more about TanStack Table">
+     Learn more about TanStack Table
+  </Card>
+</Cards>
 
 
 ## AI Agents for Repetitive Tasks

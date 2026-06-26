@@ -1,0 +1,139 @@
+---
+title: Fee Installments Workflow
+description: Multi-stage approval workflow for student fee installment management covering template creation, Inngest fan-out, voucher generation, fine calculation, and installment split requests through HOD and accountant review.
+---
+
+The fee installments workflow manages student financial obligations. An accountant
+defines a semester fee template, which fans out to individual student records via a
+background job. Students view their installments, generate payment vouchers, and can
+request a split on any unpaid installment when the full amount is not feasible. Split
+requests go through HOD review then accountant finalization. Every installment tracks
+its own due date and fine status independently.
+
+## Fee Creation and Fan-out
+
+The process starts when an Accountant creates a `SemesterFee` record. This acts as a
+template for a specific semester, department, and batch. The form collects total
+amounts and installment configurations including due dates and fine policy (Fixed
+or Per Day with an optional cap).
+
+### Background Fan-out via Inngest
+
+When a `SemesterFee` is published, an Inngest background job triggers a fan-out:
+
+1. **Event**: `onSemesterFeePublished` fires automatically on publish.
+2. **Resolution**: The system identifies all students matching the template's program,
+   batch, and department.
+3. **Generation**: For each student, a `StudentSemesterFee` record is created along
+   with individual `StudentFeeInstallment` rows based on the template.
+4. **Idempotency**: The `createStudentFeeRecord` function ensures no duplicate fee
+   records if the job retries.
+
+### Sync Utility
+
+Accountants can propagate template changes to existing student records using
+`syncStudentFeeInstallments`. If a due date is extended globally, this utility
+updates all `UNPAID` installments linked to that template. It avoids overwriting
+installments already modified by an active split request.
+
+## Student Installment Management
+
+Students see their installments through the fee portal grouped by semester.
+
+### Installment Statuses
+
+Installments move through computed statuses based on time and payment state:
+
+| Status     | Condition                                      |
+| ---------- | ---------------------------------------------- |
+| `upcoming` | Due date is in the future                      |
+| `near`     | Due date is within 7 days                      |
+| `overdue`  | Current date has passed the due date           |
+| `paid`     | Student has generated a voucher and paid       |
+
+### Voucher Generation
+
+Vouchers are generated on demand with a unique `voucherNo`. Generation is idempotent
+so calling it multiple times returns consistent data. Vouchers use Pakistan Standard
+Time (PKT) for expiry calculations. Students can download the voucher as a PDF,
+which renders a `FeeVoucherTemplate` into a printable document.
+
+### Fine Calculation
+
+Fines are calculated dynamically based on the installment's fine policy:
+
+- **Fixed**: A one-time flat amount added after the due date.
+- **Per Day**: An amount multiplied by the number of days overdue, capped by `fineCapAmount`.
+
+The fine status is displayed to the student alongside each installment so there are
+no surprises at payment time.
+
+## Installment Split Workflow
+
+Students who cannot pay a full installment can request a split, which divides one
+installment into two smaller payments.
+
+### Split Request Lifecycle
+
+The split lifecycle is governed by the `InstallmentSplitStatus` enum. Each transition
+writes an audit entry so the full history is reconstructable.
+
+| From Status     | Action               | To Status        | Actor       |
+| --------------- | -------------------- | ---------------- | ----------- |
+| `START`         | Submit split request | `PENDING`        | Student     |
+| `PENDING`       | HOD approves         | `HOD_APPROVED`   | HOD         |
+| `PENDING`       | HOD rejects          | `HOD_REJECTED`   | HOD         |
+| `PENDING`       | Cancel request       | `CANCELLED`      | Student     |
+| `HOD_APPROVED`  | Accountant finalizes | `APPROVED`       | Accountant  |
+
+### State Machine
+
+<Mermaid
+  chart="
+stateDiagram-v2
+    direction LR
+
+    [*] --> PENDING : Student submits split request
+
+    PENDING --> HOD_APPROVED : HOD approves
+    PENDING --> HOD_REJECTED : HOD rejects
+    PENDING --> CANCELLED : Student cancels
+
+    HOD_APPROVED --> APPROVED : Accountant finalizes
+
+    HOD_REJECTED --> [*]
+    CANCELLED --> [*]
+    APPROVED --> [*]
+" />
+
+### HOD Review
+
+The HOD reviews pending split requests in their department queue. On approval, the
+system calculates any accrued fines from the original overdue installment and adds
+them to the remaining balance. The status moves to `HOD_APPROVED`, pending
+accountant finalization.
+
+### Accountant Finalization
+
+Once the HOD approves, the accountant reviews and finalizes the split. On finalization,
+the original `StudentFeeInstallment` record is split into two records inside a single
+`prisma.$transaction`. The two new installments inherit the original's due date policy
+and fine configuration. The status moves to `APPROVED`, which is terminal.
+
+## Security
+
+Split request creation is rate-limited via Arcjet at 5 requests per 24 hours per user.
+Permission checks run before every action. Students are scoped to their own records
+enforced in the data fetcher by matching `studentId` against the session profile, so
+a student cannot read or mutate another student's installments.
+
+## Rate Limiting
+
+Every mutation endpoint is protected via Arcjet with fingerprint-based fixed-window
+rate limiting. Limits are scoped by the actor's role:
+
+| Role            | Limit                    |
+| --------------- | ------------------------ |
+| Student         | 10 requests per 10 min   |
+| HOD             | 15 requests per 10 min   |
+| Accountant      | 20 requests per 10 min   |

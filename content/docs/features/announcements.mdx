@@ -1,0 +1,122 @@
+---
+title: Announcements Workflow
+description: Multi-role announcement system with department-scoped and portal-wide broadcasts, draft support, future scheduling via Inngest, pinning, and bulk management.
+---
+
+The announcements workflow gives HODs, accountants, and admins a communication channel
+to broadcast information to students. Announcements support immediate publishing,
+future scheduling via background jobs, and targeted audience scoping by department,
+program, or batch. Students consume announcements through a sidebar feed and a
+dedicated announcements page.
+
+## Lifecycle State Machine
+
+The announcement lifecycle is governed by the `AnnouncementStatus` enum. Transitions
+are restricted to the author of the announcement.
+
+### State Transitions
+
+| From Status  | Action                  | To Status    | Actor  |
+| ------------ | ----------------------- | ------------ | ------ |
+| `START`      | Save draft              | `DRAFT`      | Author |
+| `DRAFT`      | Publish immediately     | `PUBLISHED`  | Author |
+| `DRAFT`      | Set future datetime     | `SCHEDULED`  | Author |
+| `DRAFT`      | Delete                  | `(deleted)`  | Author |
+| `SCHEDULED`  | Cancel schedule         | `DRAFT`      | Author |
+| `SCHEDULED`  | Auto-publish at time    | `PUBLISHED`  | Inngest |
+| `PUBLISHED`  | Archive                 | `ARCHIVED`   | Author |
+| `PUBLISHED`  | Delete                  | `(deleted)`  | Author |
+| `ARCHIVED`   | Restore                 | `PUBLISHED`  | Author |
+| `ARCHIVED`   | Delete                  | `(deleted)`  | Author |
+
+### State Machine
+
+<Mermaid
+  chart="
+stateDiagram-v2
+    direction LR
+
+    [*] --> DRAFT : Author saves draft
+
+    DRAFT --> PUBLISHED : Author publishes immediately
+    DRAFT --> SCHEDULED : Author sets future datetime
+    DRAFT --> [*] : Author deletes
+
+    SCHEDULED --> PUBLISHED : Auto-publish via Inngest at scheduledFor
+    SCHEDULED --> DRAFT : Author cancels schedule
+
+    PUBLISHED --> ARCHIVED : Author archives
+    PUBLISHED --> [*] : Author deletes
+
+    ARCHIVED --> PUBLISHED : Author restores
+    ARCHIVED --> [*] : Author deletes
+" />
+
+## Role-Based Scoping
+
+The visibility of an announcement is determined by the creator's role and the targeting
+parameters set during creation.
+
+| Role        | Default Scope  | Targeting Options                                      |
+| ----------- | -------------- | ------------------------------------------------------ |
+| HOD         | Department     | Automatically restricted to the HOD's own department   |
+| Accountant  | Portal-wide    | Can target specific department, program, batch, or year |
+| Admin       | Portal-wide    | Full control over all targeting parameters             |
+
+If `targetDepartment` is null, the announcement is treated as a global broadcast
+visible to all students.
+
+## Background Scheduling via Inngest
+
+When an announcement is scheduled, the system offloads publication to an Inngest
+background job. The `handleAnnouncementSchedule` function is triggered by the
+`announcement/scheduled` event. It uses `step.sleepUntil` to pause execution until
+the target date, then updates the status to `PUBLISHED` and sets the `publishedAt`
+timestamp. This means publication survives a server restart or cold start.
+
+## Student Announcement Feed
+
+Students consume announcements through two interfaces.
+
+### Sidebar Feed
+
+The sidebar shows a summarized list of recent announcements. Pinned announcements
+are visually highlighted with a pin icon. Publication dates are formatted using
+relative time.
+
+### Full Announcements Page
+
+The dedicated announcements page shows all published announcements with full content.
+Students can click through to view details including any attached images.
+
+## Management and Bulk Actions
+
+HODs, accountants, and admins manage announcements via a TanStack Table interface
+with filtering and bulk actions.
+
+### Filtering
+
+The table supports filtering by status, date range, pinned status, and announcement
+type via search parameters.
+
+### Bulk Operations
+
+- **Bulk status update**: Change the status of multiple selected rows simultaneously
+  when they share a uniform initial status.
+- **Bulk delete**: Permanently remove multiple announcement records.
+
+### Image Attachments
+
+Announcements support optional S3-backed image uploads via the uploader component.
+Images are stored in AWS S3 and referenced by key in the database.
+
+## Rate Limiting
+
+Every mutation endpoint is protected via Arcjet with fingerprint-based fixed-window
+rate limiting. Limits are scoped by the actor's role:
+
+| Role            | Limit                    |
+| --------------- | ------------------------ |
+| HOD             | 15 requests per 10 min   |
+| Accountant      | 20 requests per 15 min   |
+| Admin           | 20 requests per 10 min   |
