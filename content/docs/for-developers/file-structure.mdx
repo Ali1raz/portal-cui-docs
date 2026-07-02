@@ -1,0 +1,150 @@
+---
+title: File Structure
+description: Covers how the file structure is organized.
+---
+
+This page convers how the files in CUI Portal are organized, naming conventions, route structure, data-access layer, server actions, schemas, components, and utils. It is intended for AI agents and developers (or me) who want to contribute to the project or understand how it works under the hood.
+
+## Naming Conventions
+
+| Entity              | Convention                                      | Examples                                                            |
+| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| Files & folders     | **kebab-case**                                  | `get-leave-requests.ts`, `past-leave-requests/`, `subject-card.tsx` |
+| Functions/variables | **camelCase**                                   | `formatDate`, `getRelativeTime`, `cn`                               |
+| Enums               | **SCREAMING_SNAKE_CASE**                        | `STUDENT`, `BA_PENDING`, `HOD_ACCEPTED`                             |
+| Constants           | **UPPER_SNAKE_CASE**                            | `USER_JOINED_AT_FILTER_DAYS`, `ASSIGNABLE_ROLES`                    |
+| Server actions file | Always `actions.ts`                             | `app/(auth)/actions.ts`                                             |
+| Search params file  | `*-search-params.ts`                            | `leave-requests-search-params.ts`                                   |
+| Schema file         | `schema.ts` (local) or `lib/schema.ts` (global) |                                                                     |
+
+---
+
+## Route Structure (Next.js 16 App Router)
+
+### Route Groups by Role
+
+Routes are organized by role in the `app/` directory. Files are organized based on each feature.
+
+```
+app/
+  (auth)/           # Public auth pages (login, register, forgot-password)
+  (public)/         # Public pages (about, apply, admissions)
+  (user)/           # Any authenticated user (profile, settings)
+  (student)/        # STUDENT role
+  (admin)/          # ADMIN role
+  (HOD)/            # HOD role
+  (professor)/      # PROFESSOR role
+  (clerk)/          # CLERK role
+  (accountant)/     # ACCOUNTANT role
+```
+
+### Page Route Pattern
+
+```
+(app route group)/
+  layout.tsx              # session + role guard
+  page.tsx                # Dashboard
+  _components/            # Route-group-private components
+  {feature}/
+    _components/          # Route-group-private components (which are related only to this feature only, not global)
+    page.tsx
+    [id]/
+      page.tsx
+    actions.ts            # Server actions (colocated with feature)
+    schema.ts             # Zod schemas (colocated with feature)
+    *-search-params.ts    # nuqs search param definitions
+```
+
+
+## Data-Access Layer
+
+### Location & Organization
+
+All data fetching lives in `app/data/{role}/get-{feature}.ts` as **server-only modules**.
+
+```
+app/data/
+  student/      # announcements, complaints, leave requests, fee, subjects
+  admin/        # dashboard, users, subjects, offerings, semesters
+  hod/          # dashboard, announcements, complaints, leave requests, fee split
+  professor/    # courses, lectures, students, complaints, leave requests
+  clerk/        # applications, dashboard stats
+  accountant/   # fee, semesters, announcements
+  user/         # applications, sessions, current semester
+  session/      # require-session.ts
+  permission/   # require-permission.ts
+```
+
+## Server Actions (`actions.ts`)
+
+### Location
+
+Colocated in the same directory as the page they serve.
+
+```
+(student)/
+  student/
+    actions.ts            # All student mutations (for Create, Update, Delete {feature})
+    request-leave/
+      actions.ts            # Actions related to leave requests (create, delete, update)
+      page.tsx
+```
+
+
+## Schemas
+
+### Locations
+
+| Scope    | Location                                | Purpose                                              |
+| -------- | --------------------------------------- | ---------------------------------------------------- |
+| Global   | `lib/schema.ts`                         | Login/register schemas                               |
+| Global   | `lib/zod-schema.ts`                     | Form schemas (preferred central location)            |
+| Local    | `app/{route-group}/{feature}/schema.ts` | Feature-specific schemas                             |
+| Database | `prisma/schema.prisma`                  | Data model (1059 lines, enums + relations + indexes) |
+| Env      | `lib/env.ts`                            | Environment validation (t3-env + zod)                |
+
+
+## Components
+
+### Three-Tier Component Structure
+
+| Tier           | Location                                                         | Purpose                                      |
+| -------------- | ---------------------------------------------------------------- | -------------------------------------------- |
+| UI Primitives  | `components/ui/`                                                 | shadcn/ui primitives (44 files)              |
+| Shared Feature | `components/`                                                    | Cross-cutting feature components             |
+| Route-Private  | `app/(role)/{feature}/_components/` | Components used only within that route group |
+
+## Utils (`lib/`)
+
+For reusable utility functions, helpers, types, and constants. Also used for creating singletons (like Prisma, S3 client, Nodemailer transport, etc.) that are shared across the app.
+
+### Shared Utilities
+
+| File                                      | Purpose                                                                                |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `lib/utils.ts`                            | `cn()` (tailwind-merge+clsx), `formatDate()`, `formatEnumLabel()`, `getRelativeTime()` |
+| `lib/permissions.ts`                      | RBAC permission definitions                                                            |
+| `lib/prisma.ts`                           | Prisma singleton                                                                       |
+| `lib/auth.ts`                             | better-auth server config                                                              |
+| `lib/auth-client.ts`                      | better-auth client config                                                              |
+| `lib/env.ts`                              | Environment validation                                                                 |
+| `lib/error-message.ts`                    | Error message type extraction from errors                                              |
+| `lib/arcjet.ts` / `lib/arcjet-protect.ts` | Arcjet rate limiting                                                                   |
+| `lib/s3Client.ts`                         | AWS S3 client                                                                          |
+| `lib/nodemailer.ts`                       | Email transport                                                                        |
+| `lib/send.ts`                             | nodemailer email sending                                                               |
+
+### Custom Hooks
+
+for reusable React hooks.
+
+| Hook              | File                         | Purpose                                     |
+| ----------------- | ---------------------------- | ------------------------------------------- |
+| `tryCatch`        | `hooks/tryCatch.ts`          | Async try/catch wrapper → `{ data, error }` |
+| `useConstructUrl` | `hooks/use-construct-url.ts` | S3 image URL construction                   |
+| `useMobile`       | `hooks/use-mobile.ts`        | Mobile viewport detection                   |
+| `useScroll`       | `hooks/use-scroll.ts`        | Scroll position tracking                    |
+| `useSignout`      | `hooks/use-signout.tsx`      | Client-side signout                         |
+| `usePermission`   | `hooks/usePermission.ts`     | Client-side permission check                |
+
+---

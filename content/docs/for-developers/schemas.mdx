@@ -1,0 +1,101 @@
+---
+title: Utils and Schemas
+description: Covers how to use utils and schemas in the project.
+---
+
+This covers how to use re-usable util functions and schemas in the project.
+
+## Utils
+
+utils are re-usable functions that can be used across the project. They are located in the `lib/utils.ts` directory.
+
+[See Examples](https://github.com/Ali1raz/portal-cui/blob/50935004de144802579b861787455df79f09db5d/lib/utils.ts)
+
+
+## Schemas
+
+This includes Zod schemas that are used for data validation and type inference for forms and actions.
+
+[Read more about file structure](./file-structure#5-schemas)
+
+## Search params schema
+
+Search params schema is created using `zod` and `nuqs`, see following example:
+
+```typescript lineNumbers title="app/(admin)/admin/subjects/subjects-search-params.ts"
+import {
+  createSearchParamsCache,
+  parseAsInteger,
+  parseAsString,
+  parseAsStringEnum,
+} from "nuqs/server";
+export const subjectsSortByValues = [
+  "name",
+  "code",
+  "creditHours",
+  "offerings",
+] as const;
+export const sortDirValues = ["asc", "desc"] as const;
+
+export type SubjectsSortBy = (typeof subjectsSortByValues)[number];
+export type SubjectsSortDir = (typeof sortDirValues)[number];
+
+/// Shared nuqs parsers for subjects search params.
+export const subjectsSearchParamsParsers = {
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+  pageSize: parseAsInteger
+    .withDefault(APP.default_page_size)
+    .withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum(Object.values(subjectsSortByValues))
+    .withDefault("name")
+    .withOptions({ clearOnDefault: true }),
+  sortDir: parseAsStringEnum(Object.values(sortDirValues))
+    .withDefault("asc")
+    .withOptions({ clearOnDefault: true }),
+  query: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+};
+
+export const subjectsSearchParamsCache = createSearchParamsCache(
+  subjectsSearchParamsParsers
+);
+
+export type SubjectsSearchParams = Awaited<
+  ReturnType<typeof subjectsSearchParamsCache.parse>
+>;
+
+```
+
+[See full example](https://github.com/Ali1raz/portal-cui/blob/b083769173ad8676ee02453036dd7af508046934/app/(admin)/admin/subjects/subjects-search-params.ts)
+
+
+### Infered type from Data file
+
+Type is returned in data file to automatically type what function returns, see following example:
+
+```typescript lineNumbers title="app/data/admin/get-all-subjects.ts"
+import "server-only";
+
+export async function adminGetAllSubjects({
+  page,
+  pageSize,
+  sortBy,
+  sortDir,
+  query,
+}: AdminGetAllSubjectsParams) {
+
+  const [subjects, totalCount] = await Promise.all([
+    prisma.subject.findMany({
+     //...
+    }),
+    prisma.subject.count({ where }),
+  ]);
+
+  return { subjects, totalCount };
+}
+
+export type AdminGetAllSubjectsType = Awaited<
+  ReturnType<typeof adminGetAllSubjects>
+>["subjects"][number];
+```
+
+[See more example](https://github.com/Ali1raz/portal-cui/blob/39df9cf56ee8d9bc750e8aa2085d24ab6624396b/app/data/admin/get-all-subjects.ts)

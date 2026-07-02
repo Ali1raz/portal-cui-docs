@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { gitConfig } from "@/lib/shared";
 import { DocsAttribution } from "@/components/docs/docs-attribution";
+import { AlertTriangle } from "lucide-react";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -27,7 +28,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
       toc={page.data.toc}
       full={page.data.full}
       tableOfContent={{
-        single: true,
+        footer: (
+          <div className="text-red-600 border border-t-red-400 flex flex-row items-baseline gap-2 dark:text-red-300">
+            <AlertTriangle className="size-4 shrink-0" />
+            <p>This is not official COMSATS Portal</p>
+          </div>
+        ),
       }}
       footer={{
         children: <DocsAttribution />,

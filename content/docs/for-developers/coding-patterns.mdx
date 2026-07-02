@@ -1,0 +1,170 @@
+---
+title: Coding Patterns
+description: Covers how the coding patterns are used in the project.
+---
+
+This covers how the coding patterns are used in the project, including how to use components, handle data, and secure actions.
+
+
+## Props Pattern
+
+How to get props from dynamic page routes.
+
+```tsx
+// ✅ Correct
+export default async function Page(
+  props: PageProps<"/student/announcements/[id]">,
+) {
+  const { id } = await props.params;
+}
+
+// ❌ Never do this
+export default function Page({ params }: { params: { id: string } }) {} // or promise
+```
+
+### Link `href` Pattern
+
+how to pass props to `Link` component.
+
+```tsx
+// ✅ Correct
+<Link href="/admin/subjects/123" />
+
+// ❌ Never cast or use query objects
+<Link href={`/admin/subjects/${id}` as ComponentProps<typeof Link>["href"]} />
+<Link href={{ pathname: "/admin/users/[userId]", query: { userId } }} />
+```
+
+
+## Server Action Props
+
+how to get data from server actions.
+
+### Mutation Args
+
+```typescript
+"use server";
+
+export async function createLeaveRequest(
+  data: CreateLeaveRequestInput
+): Promise<ApiResponseType> {
+  // data is validated via zod.safeParse before calling
+}
+
+export async function updateLeaveRequestStatus(
+  id: string,
+  data: CreateLeaveRequestSchema
+): Promise<ApiResponseType> { ... }
+
+export async function deleteLeaveRequest(id: string): Promise<ApiResponseType> { ... }
+```
+
+
+## Types in Data Files
+
+how to define types in data files.
+
+```tsx
+// Can use types from local data file
+import type { SubjectsSearchParams } from "@/app/(admin)/admin/subjects/subjects-search-params";
+
+type AdminGetAllSubjectsParams = Pick<
+  SubjectsSearchParams,
+  "page" | "pageSize" | "sortBy" | "sortDir" | "query"
+>;
+
+export async function adminGetAllSubjects({
+  page,
+  pageSize,
+  sortBy,
+  sortDir,
+  query,
+}: AdminGetAllSubjectsParams) {}
+```
+
+
+### Props Anti-Patterns (Avoid)
+
+```tsx
+// ❌ No inline types in component signature
+export default function Page({ params }: { params: { id: string } }) {}
+
+// ❌ No any
+interface Props {
+  data: any;
+  onChange: (value: any) => void;
+}
+
+// ❌ No spreading unknown props
+<div {...props} />
+
+// ❌ No function props for static data
+<UserCard getName={() => "John"} />
+```
+
+---
+
+## Data File Pattern
+
+```typescript
+import "server-only";
+import prisma from "@/lib/prisma";
+import { requireStudentSession } from "./require-student-session";
+import { requirePermission } from "../permission/require-permission";
+
+export async function getStudentLeaveRequests({
+  page,
+  pageSize,
+  sortBy,
+  sortDir,
+  query,
+}) {
+  const session = await requireStudentSession();
+  const can = await requirePermission({ leaveRequest: ["list", "get"] });
+  if (!can) return redirect("/unauthorized");
+  // Prisma query with select (only needed fields)
+}
+```
+
+### Key Rules
+
+- Every data file starts with `import "server-only"`
+- Session check via `requireSession()` from `app/data/session/require-session.ts`
+- Permission check via `requirePermission()` from `app/data/permission/require-permission.ts`
+- `React.cache()` used in session functions for request deduplication
+- Prisma `.select()` used to minimize serialized data at RSC boundaries
+- Types exported as `Awaited<ReturnType<typeof fn>>`
+- Parallel data fetching with `Promise.all()` in page components
+
+---
+
+## Action Pattern
+
+```typescript
+"use server";
+import { requirePermission } from "@/app/data/permission/require-permission";
+import { requireStudentSession } from "@/app/data/student/require-student-session";
+import prisma from "@/lib/prisma";
+
+export async function enrollCourse(
+  offeringId: string,
+): Promise<ApiResponseType> {
+  const session = await requireStudentSession();
+  const can = await requirePermission({ subjectOfferings: ["enroll"] });
+  if (!can) return { status: "error", message: "Not allowed." };
+  // mutation
+  return { status: "success", message: "Enrolled." };
+}
+```
+
+---
+
+## Summary: Where Props Are Defined
+
+| Layer                   | Props Defined In                         | Consumed By             |
+| ----------------------- | ---------------------------------------- | ----------------------- |
+| Page                    | Route file (`page.tsx`)                  | Next.js router          |
+| Data                    | Data file (`get-*.ts`)                   | Page, components        |
+| Action                  | Schema file (`schema.ts`) + `actions.ts` | Form submit, components |
+| Shared Component        | Component file (`ComponentName.tsx`)     | Any route               |
+| Route-Private Component | Component file or `_components/index.ts` | Parent route pages      |

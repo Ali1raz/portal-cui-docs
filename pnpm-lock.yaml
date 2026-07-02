@@ -93,6 +93,9 @@ importers:
       postcss:
         specifier: ^8.5.15
         version: 8.5.15
+      react-medium-image-zoom:
+        specifier: ^5.4.8
+        version: 5.4.8(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       tailwindcss:
         specifier: ^4.3.1
         version: 4.3.1
@@ -4280,6 +4283,12 @@ packages:
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
+
+  react-medium-image-zoom@5.4.8:
+    resolution: {integrity: sha512-72CIldEUaPejjcaDOYIeDsGlWzNKpmxyKgiPi1LBCkWCIGHDLlA2KTeo2uNtmN/m72Y3k/2uWDfon9SDiPbHaA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   react-remove-scroll-bar@2.3.8:
     resolution: {integrity: sha512-9r+yi9+mgU33AKcj6IbT9oRCO78WriSj6t/cF8DWBZJ9aOGPOTEDvdUDz1FwKim7QXWwmHqtdHnRJfhAxEG46Q==}
@@ -9646,6 +9655,11 @@ snapshots:
       scheduler: 0.27.0
 
   react-is@16.13.1: {}
+
+  react-medium-image-zoom@5.4.8(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
 
   react-remove-scroll-bar@2.3.8(@types/react@19.2.17)(react@19.2.7):
     dependencies:

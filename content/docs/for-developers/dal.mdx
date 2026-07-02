@@ -1,0 +1,235 @@
+---
+title: Data Access Layer
+description: Covers how to use the Data Access Layer in the project.
+---
+
+# Data Access Layer
+
+This covers how to get data on server side using prisma, and how to define params for search queries using nuqs.
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+<Accordions type="single">
+  <Accordion title="Why separate the data access layer?">
+**Enhance security & control**: Manage connections, transactions, and queries consistently.
+**Improve maintainability & reusability**: Centralize all data operations in one place.
+**Separate concerns**: Keep data access code out of business logic.
+  </Accordion>
+
+  <Accordion title="why get on server side?">
+**Security (Biggest reason)**: Exposing your database to the client means anyone can see credentials, run any query, or steal data. Server acts as a gatekeeper.
+**Authorization & Access Control**: Server can check who the user is and what they are allowed to see before returning data.
+**Data Protection**: You can filter, sanitize, and hide sensitive fields on the server.
+**Performance**: Server can do complex queries, joins, caching, pagination, and aggregation efficiently. Client devices are weaker and have limited bandwidth.
+  </Accordion>
+
+</Accordions>
+
+## Usage example
+
+[Read more about file structure conventions](./file-structure#page-route-pattern)
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+<Steps>
+
+<Step>
+### Search Params
+
+Search params created using `nuqs` inside: `app/(admin)/admin/subjects/subjects-search-params.ts`, because these types can be used on server client side.
+
+```typescript title="app/(admin)/admin/subjects/subjects-search-params.ts" lineNumbers
+import { APP } from "@/lib/data/utils";
+import {
+  createSearchParamsCache,
+  parseAsInteger,
+  parseAsString,
+  parseAsStringEnum,
+} from "nuqs/server";
+export const subjectsSortByValues = [
+  "name",
+  "code",
+  "creditHours",
+  "offerings",
+] as const;
+export const sortDirValues = ["asc", "desc"] as const;
+
+export type SubjectsSortBy = (typeof subjectsSortByValues)[number];
+export type SubjectsSortDir = (typeof sortDirValues)[number];
+
+/// Shared nuqs parsers for subjects search params.
+export const subjectsSearchParamsParsers = {
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+  pageSize: parseAsInteger
+    .withDefault(APP.default_page_size)
+    .withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum(Object.values(subjectsSortByValues))
+    .withDefault("name")
+    .withOptions({ clearOnDefault: true }),
+  sortDir: parseAsStringEnum(Object.values(sortDirValues))
+    .withDefault("asc")
+    .withOptions({ clearOnDefault: true }),
+  query: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+};
+
+export const subjectsSearchParamsCache = createSearchParamsCache(
+  subjectsSearchParamsParsers
+);
+
+export type SubjectsSearchParams = Awaited<
+  ReturnType<typeof subjectsSearchParamsCache.parse>
+>;
+```
+
+[See full example](https://github.com/Ali1raz/portal-cui/blob/b083769173ad8676ee02453036dd7af508046934/app/(admin)/admin/subjects/subjects-search-params.ts)
+</Step>
+
+<Step>
+### Get data from server using prisma and nuqs search params.
+
+Data is fetched on server side inside: `app/data/admin/get-all-subjects.ts`.
+
+```typescript title="app/data/admin/get-all-subjects.ts" lineNumbers
+import "server-only";
+import prisma from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import type { SubjectsSearchParams } from "@/app/(admin)/admin/subjects/subjects-search-params"; // search-params
+
+type AdminGetAllSubjectsParams = Pick<
+  SubjectsSearchParams,
+  "page" | "pageSize" | "sortBy" | "sortDir" | "query"
+>;
+
+export async function adminGetAllSubjects({
+  page,
+  pageSize,
+  sortBy,
+  sortDir,
+  query,
+}: AdminGetAllSubjectsParams) {
+  const safePage = Math.max(page, 1);
+  const safePageSize = Math.max(pageSize, 1);
+  const direction: Prisma.SortOrder = sortDir;
+  const trimmedQuery = query.trim();
+  const where: Prisma.SubjectWhereInput = trimmedQuery
+    ? {
+        OR: [
+          { name: { contains: trimmedQuery, mode: "insensitive" } },
+          { code: { contains: trimmedQuery, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const orderBy: Prisma.SubjectOrderByWithRelationInput =
+    sortBy === "name"
+      ? { name: direction }
+      : sortBy === "code"
+        ? { code: direction }
+        : sortBy === "creditHours"
+          ? { creditHours: direction }
+          : sortBy === "offerings"
+            ? { offerings: { _count: direction } }
+            : { name: "asc" };
+
+  const [subjects, totalCount] = await Promise.all([
+    prisma.subject.findMany({
+      skip: (safePage - 1) * safePageSize,
+      take: safePageSize,
+      orderBy,
+      where,
+      select: {
+        id: true,
+        //...
+      },
+    }),
+    prisma.subject.count({ where }),
+  ]);
+
+  return { subjects, totalCount };
+}
+
+export type AdminGetAllSubjectsType = Awaited< // type of return value of this function to be used in server/client components
+  ReturnType<typeof adminGetAllSubjects>
+>["subjects"][number];
+```
+
+[See full example](https://github.com/Ali1raz/portal-cui/blob/39df9cf56ee8d9bc750e8aa2085d24ab6624396b/app/data/admin/get-all-subjects.ts)
+</Step>
+
+<Step>
+### Use data in pages
+
+use data in server components like this:
+
+```tsx title="app/(admin)/admin/subjects/page.tsx" lineNumbers
+import type { SubjectsSearchParams } from "@/app/(admin)/admin/subjects/subjects-search-params";
+import { subjectsSearchParamsCache } from "@/app/(admin)/admin/subjects/subjects-search-params";
+import { AdminSubjectsTable } from "./_components/admin-subjects-table";
+
+export default async function SubjectsPage(
+  props: PageProps<"/admin/subjects">
+) {
+  return (
+    <div>
+      <Suspense fallback={<SubjectsTableSkeleton />}>
+        <SubjectsList searchParams={props.searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function SubjectsList({
+  searchParams,
+}: {
+  searchParams: PageProps<"/admin/subjects">["searchParams"];
+}) {
+  const parsedParams: SubjectsSearchParams =
+    await subjectsSearchParamsCache.parse(searchParams);
+  const { subjects, totalCount } = await adminGetAllSubjects(parsedParams);
+
+  return <AdminSubjectsTable subjects={subjects} totalCount={totalCount} />; // this is client component
+}
+
+function SubjectsTableSkeleton() {
+  return (
+    <div className="my-2 rounded-md border">
+    // ...skeleton UI for loading state
+    </div>
+  );
+}
+
+```
+
+[See full example](https://github.com/Ali1raz/portal-cui/blob/9c4592b14d89396f1f3e3cb8ac1407102739478a/app/(admin)/admin/subjects/page.tsx)
+</Step>
+
+<Step>
+### Client Side Usage
+
+Usage of data type returned from data file and search params type in client component.
+
+```tsx title="app/(admin)/admin/subjects/_components/admin-subjects-table.tsx" lineNumbers 
+"use client";
+import type { AdminGetAllSubjectsType } from "@/app/data/admin/get-all-subjects";
+import { useQueryStates } from "nuqs";
+import { subjectsSearchParamsParsers } from "../subjects-search-params";
+
+export function AdminSubjectsTable({
+  subjects,
+  totalCount,
+}: {
+  subjects: AdminGetAllSubjectsType[]; // type retured from data file
+  totalCount: number;
+}) {
+  //...  
+  return (
+    //...
+  );
+}
+```
+
+[See full example](https://github.com/Ali1raz/portal-cui/blob/f4d1774d3561f3f32e16a9c0e2dd3f4641705705/app/(admin)/admin/subjects/_components/admin-subjects-table.tsx)
+</Step>
+</Steps>
+
+That's it! You can now use the Data Access Layer in your project to fetch data securely on the server side, while also leveraging type safety and search parameter parsing.
